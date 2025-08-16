@@ -1,54 +1,109 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+/**
+ * Google CSE (Programmable Search) embed
+ * - Butuh env VITE_GOOGLE_CSE_ID berisi "cx"
+ * - Script hanya dimuat sekali, lalu render elemen <div id="cse-container" />
+ * - Tanpa API key (ini elemen UI, bukan REST API)
+ */
 export function SearchPanel() {
-  const [query, setQuery] = useState("");
-  const [searchUrl, setSearchUrl] = useState("https://www.google.com/");
+  const CX = (import.meta as any).env?.VITE_GOOGLE_CSE_ID || "";
+  const [ready, setReady] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const renderedRef = useRef(false);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
-    const encoded = encodeURIComponent(query);
-    setSearchUrl(`https://www.google.com/search?q=${encoded}`);
-  }
+  useEffect(() => {
+    if (!CX) {
+      setErr(
+        "Search belum aktif: set VITE_GOOGLE_CSE_ID di Netlify Environment (Search engine ID / cx)."
+      );
+      return;
+    }
+
+    // Pastikan parse tags explicit agar kita render manual.
+    (window as any).__gcse = { parsetags: "explicit" };
+
+    function renderCSE() {
+      try {
+        if (renderedRef.current) return;
+        const g = (window as any).google;
+        if (!g?.search?.cse?.element) return;
+
+        g.search.cse.element.render({
+          div: "cse-container",
+          tag: "search", // menampilkan search box + hasil
+          attributes: {
+            linkTarget: "_blank", // buka di tab baru jika di-click
+            enableAutoComplete: true,
+          },
+        });
+        renderedRef.current = true;
+        setReady(true);
+      } catch (e) {
+        console.error(e);
+        setErr("Gagal merender Google CSE.");
+      }
+    }
+
+    // Jika script sudah ada, langsung render.
+    const EXISTING = document.getElementById("gcse-script") as HTMLScriptElement | null;
+    if (EXISTING) {
+      // tunggu sampai window.google ready
+      const t = setInterval(() => {
+        if ((window as any).google?.search?.cse?.element) {
+          clearInterval(t);
+          renderCSE();
+        }
+      }, 100);
+      return () => clearInterval(t);
+    }
+
+    // Muat script baru
+    const s = document.createElement("script");
+    s.id = "gcse-script";
+    s.async = true;
+    s.src = `https://cse.google.com/cse.js?cx=${encodeURIComponent(CX)}`;
+    s.onload = () => {
+      // tunggu hingga object google terpasang
+      const t = setInterval(() => {
+        if ((window as any).google?.search?.cse?.element) {
+          clearInterval(t);
+          renderCSE();
+        }
+      }, 100);
+    };
+    s.onerror = () => setErr("Gagal memuat script Google CSE.");
+    document.body.appendChild(s);
+  }, [CX]);
 
   return (
-    <div className="space-y-4">
-      {/* Search Bar */}
-      <form
-        onSubmit={handleSearch}
-        className="flex items-center gap-2 bg-white shadow px-3 py-2 rounded-lg border"
-      >
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cari istilah medis atau diagnosis…"
-          className="flex-1 px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded hover:bg-emerald-700"
-        >
-          Cari
-        </button>
-      </form>
-
-      {/* Info */}
-      <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded">
-        🔍 Gunakan Google langsung di sini untuk mencari guideline, definisi,
-        atau jurnal medis. Hasil tetap bahasa asli (English), tekan
-        <span className="font-semibold"> “Tampilkan Terjemahan” </span> jika ingin melihat versi Bahasa Indonesia.
+    <section className="space-y-3">
+      <div className="bg-white border rounded-lg shadow-sm p-3">
+        <div className="text-sm text-slate-700">
+          <b>Google Search (ter-embed)</b> — ketik kata kunci di kotak bawah, hasil
+          muncul langsung di halaman ini.
+        </div>
+        {!CX && (
+          <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+            VITE_GOOGLE_CSE_ID belum diset.
+          </div>
+        )}
       </div>
 
-      {/* Embedded Google */}
-      <div className="w-full h-[70vh] border rounded-lg overflow-hidden">
-        <iframe
-          key={searchUrl}
-          src={searchUrl}
-          title="Google Search"
-          className="w-full h-full"
-        />
+      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        {/* Google akan mengganti isi div ini dengan widget-nya */}
+        <div id="cse-container" className="min-h-[60vh] p-2" />
+        {!ready && !err && (
+          <div className="p-4 text-sm text-slate-500">Memuat Google Search…</div>
+        )}
+        {err && (
+          <div className="p-4 text-sm text-red-700 bg-red-50 border-t border-red-200">
+            {err}
+          </div>
+        )}
       </div>
-    </div>
+    </section>
   );
 }
+
+export default SearchPanel;
