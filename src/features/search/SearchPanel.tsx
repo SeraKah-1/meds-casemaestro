@@ -1,0 +1,39 @@
+import { useState } from 'react';
+
+export function SearchPanel() {
+  const [q, setQ] = useState('STEMI initial management');
+
+  const url = 'https://duckduckgo.com/?kp=1&kz=-1&k1=-1&q=' + encodeURIComponent(q);
+
+  return (
+    <section className="bg-white border rounded-lg p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search terminology or guidelines..."
+          className="flex-1 border rounded px-3 py-2 text-sm"
+        />
+        <a
+          className="px-3 py-2 rounded bg-slate-800 text-white text-sm"
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open
+        </a>
+      </div>
+      <div className="mt-3 h-[60vh]">
+        <iframe
+          title="websearch"
+          className="w-full h-full border rounded"
+          src={url}
+          loading="lazy"
+        />
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500">
+        Tip: Use Search to justify your choices. Results open inside this panel (DuckDuckGo Lite).
+      </p>
+    </section>
+  );
+}
