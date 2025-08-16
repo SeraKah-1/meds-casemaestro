@@ -26,7 +26,9 @@ export function CasePanel({
     <section className="bg-white border rounded-lg p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <h2 className="font-semibold">{meta.title}</h2>
-        <span className="text-[10px] text-slate-500">{caseJson.specialty} • diff {caseJson.difficulty}</span>
+        <span className="text-[10px] text-slate-500">
+          {caseJson.specialty} • diff {caseJson.difficulty}
+        </span>
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -42,7 +44,8 @@ export function CasePanel({
       </div>
 
       <div className="mt-5 p-3 bg-slate-50 border rounded text-xs text-slate-600">
-        <b>Teaching points preview:</b> {(solution.teaching_points ?? []).slice(0, 2).join(' • ')}
+        <b>Teaching points preview:</b>{' '}
+        {(solution.teaching_points ?? []).slice(0, 2).join(' • ')}
       </div>
     </section>
   );
@@ -87,7 +90,9 @@ function ActionGroup({
                 <span>{a.text}</span>
                 {selected && <span className="text-[10px] text-blue-700">selected</span>}
               </div>
-              {selected && a.reveal_text && <div className="mt-1 text-xs text-slate-600">{a.reveal_text}</div>}
+              {selected && a.reveal_text && (
+                <div className="mt-1 text-xs text-slate-600">{a.reveal_text}</div>
+              )}
               {selected && a.reveal_image && (
                 <img src={a.reveal_image} alt="" className="mt-2 rounded border" loading="lazy" />
               )}
@@ -97,4 +102,14 @@ function ActionGroup({
       </div>
     </div>
   );
+}
+
+/** Pretty-print small objects like vitals/demographics */
+function fmtObj(obj?: Record<string, any>): string {
+  if (!obj || typeof obj !== 'object') return '-';
+  const entries = Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  if (!entries.length) return '-';
+  return entries
+    .map(([k, v]) => `${k}: ${typeof v === 'number' ? v : String(v)}`)
+    .join(' • ');
 }
