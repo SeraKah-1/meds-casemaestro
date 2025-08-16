@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* quick baseline */
+:root {
+  color-scheme: light;
+}
+html, body, #root {
+  height: 100%;
+}
+body {
+  @apply text-slate-900 bg-slate-50;
+}
+
+/* tiny utility for the layout */
+.container-narrow {
+  @apply max-w-5xl mx-auto px-4;
+}
