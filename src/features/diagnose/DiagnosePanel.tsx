@@ -20,6 +20,8 @@ export function DiagnosePanel({
   const [loadingAI, setLoadingAI] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const fieldsDisabled = !enabled || loadingAI;
+
   function toList(text: string) {
     return text
       .split('\n')
@@ -59,7 +61,7 @@ export function DiagnosePanel({
   }
 
   return (
-    <section className="bg-white border rounded-lg p-4 shadow-sm opacity-100">
+    <section className="bg-white border rounded-lg p-4 shadow-sm">
       <h2 className="font-semibold">Diagnose</h2>
       {!enabled && <p className="mt-2 text-sm text-slate-500">Start a case first.</p>}
 
@@ -71,7 +73,8 @@ export function DiagnosePanel({
             placeholder="e.g., Inferior STEMI"
             value={dx}
             onChange={(e) => setDx(e.target.value)}
-            disabled={!enabled}
+            disabled={fieldsDisabled}
+            aria-busy={loadingAI}
           />
           <div className="text-xs text-slate-500 mt-2">Use clear, specific terms.</div>
         </div>
@@ -83,7 +86,8 @@ export function DiagnosePanel({
             placeholder="- Activate cath lab (PCI)\n- Aspirin 325 mg chew + P2Y12\n- Heparin per protocol"
             value={mgmtText}
             onChange={(e) => setMgmtText(e.target.value)}
-            disabled={!enabled}
+            disabled={fieldsDisabled}
+            aria-busy={loadingAI}
           />
         </div>
       </div>
@@ -91,7 +95,7 @@ export function DiagnosePanel({
       <div className="mt-3 flex items-center gap-2">
         <button
           onClick={handleLocalScore}
-          disabled={!enabled}
+          disabled={!enabled || loadingAI}
           className="px-3 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-50"
         >
           Local Score
@@ -107,7 +111,7 @@ export function DiagnosePanel({
 
         <button
           onClick={handleSave}
-          disabled={!enabled}
+          disabled={!enabled || loadingAI}
           className="px-3 py-2 rounded bg-slate-800 text-white text-sm disabled:opacity-50"
         >
           Save Case
