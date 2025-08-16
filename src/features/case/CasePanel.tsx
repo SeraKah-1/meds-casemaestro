@@ -1,20 +1,44 @@
 import type { CaseFile, CaseAction } from '../../types/case';
+import { Skeleton } from '../../components/Skeleton';
 
 export function CasePanel({
   caseJson,
   picks,
-  onTogglePick
+  onTogglePick,
+  loading = false
 }: {
   caseJson: CaseFile | null;
   picks: string[];
   onTogglePick: (id: string) => void;
+  loading?: boolean;
 }) {
+  if (loading) {
+    return (
+      <section className="bg-white border rounded-lg p-4 shadow-sm">
+        <div className="flex items-start justify-between">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <SkInfo />
+          <SkInfo />
+          <SkInfo />
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <SkList />
+          <SkList />
+          <SkList />
+        </div>
+      </section>
+    );
+  }
+
   if (!caseJson) {
     return (
       <section className="bg-white border rounded-lg p-4 shadow-sm">
         <h2 className="font-semibold">Case</h2>
         <p className="mt-2 text-sm text-slate-700">
-          Click <b>Start Case</b> above to generate a mock case (AI will be wired later).
+          Click <b>Start Case</b> above to generate a case.
         </p>
       </section>
     );
@@ -112,4 +136,29 @@ function fmtObj(obj?: Record<string, any>): string {
   return entries
     .map(([k, v]) => `${k}: ${typeof v === 'number' ? v : String(v)}`)
     .join(' • ');
+}
+
+// --- skeleton subcomponents ---
+function SkInfo() {
+  return (
+    <div className="border rounded p-3 bg-white">
+      <Skeleton className="h-3 w-24" />
+      <div className="mt-2 space-y-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+    </div>
+  );
+}
+function SkList() {
+  return (
+    <div className="border rounded p-3 bg-white">
+      <Skeleton className="h-3 w-20 mb-2" />
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </div>
+  );
 }
