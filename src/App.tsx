@@ -14,11 +14,11 @@ import { getCase, localGrade, remoteGrade } from './lib/api';
 type TabKey = 'case' | 'search' | 'notes' | 'diagnose' | 'saved';
 
 const tabs: { key: TabKey; label: string }[] = [
-  { key: 'case', label: 'Case' },
-  { key: 'search', label: 'Search' },
-  { key: 'notes', label: 'Notes' },
-  { key: 'diagnose', label: 'Diagnose' },
-  { key: 'saved', label: 'Saved' }
+  { key: 'case', label: 'Kasus' },
+  { key: 'search', label: 'Cari' },
+  { key: 'notes', label: 'Catatan' },
+  { key: 'diagnose', label: 'Diagnosa' },
+  { key: 'saved', label: 'Tersimpan' }
 ];
 
 export default function App() {
@@ -33,10 +33,7 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [usedFallback, setUsedFallback] = useState(false);
 
-  useEffect(() => {
-    setSaved(loadCases());
-  }, []);
-
+  useEffect(() => { setSaved(loadCases()); }, []);
   useEffect(() => {
     if (!caseJson) return;
     const key = `notes:${caseJson.id}`;
@@ -51,12 +48,12 @@ export default function App() {
     setErr(null);
     setUsedFallback(false);
     try {
-      const data = await getCase({ specialty, difficulty }); // AI → fallback internal di api.ts (mock jika /api tidak ada)
+      const data = await getCase({ specialty, difficulty }); // AI → kalau gagal akan ditangkap catch di sini
       setCaseJson(data);
       setPicks([]);
       setTab('case');
     } catch (e: any) {
-      // Hard fallback: pakai mock lokal jika benar2 gagal
+      // Fallback ke mock lokal
       try {
         const { generateMockCase } = await import('./features/case/mock');
         const mock = generateMockCase(specialty, difficulty);
@@ -64,7 +61,7 @@ export default function App() {
         setUsedFallback(true);
         setTab('case');
       } catch {
-        setErr('Failed to start case. Please try again.');
+        setErr('Gagal memulai kasus. Coba lagi.');
       }
     } finally {
       setLoading(false);
@@ -95,7 +92,7 @@ export default function App() {
       caseJson,
       submission: sub,
       score,
-      version: '0.2'
+      version: '0.2-id'
     };
     saveCase(entry);
     setSaved(loadCases());
@@ -123,7 +120,7 @@ export default function App() {
 
         {/* Controls */}
         <div className="container-narrow flex flex-wrap items-center gap-2 pb-3">
-          <label className="text-xs text-slate-600">Specialty</label>
+          <label className="text-xs text-slate-600">Spesialis</label>
           <select
             className="border rounded px-2 py-1 text-sm"
             value={specialty}
@@ -136,19 +133,19 @@ export default function App() {
             ))}
           </select>
 
-          <label className="text-xs text-slate-600 ml-3">Difficulty</label>
+          <label className="text-xs text-slate-600 ml-3">Kesulitan</label>
           <select
             className="border rounded px-2 py-1 text-sm"
             value={difficulty}
             onChange={(e) => setDifficulty(Number(e.target.value) as any)}
           >
-            <option value={1}>1 (easy)</option>
-            <option value={2}>2 (core)</option>
-            <option value={3}>3 (hard)</option>
+            <option value={1}>1 (mudah)</option>
+            <option value={2}>2 (inti)</option>
+            <option value={3}>3 (sulit)</option>
           </select>
 
           <button onClick={startCase} className="ml-3 px-3 py-1.5 rounded bg-blue-600 text-white text-sm" disabled={loading}>
-            {loading ? 'Starting…' : 'Start Case'}
+            {loading ? 'Memulai…' : 'Mulai Kasus'}
           </button>
         </div>
 
@@ -174,7 +171,7 @@ export default function App() {
         {err && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{err}</div>}
         {usedFallback && (
           <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded">
-            AI case generation failed — using local mock case for now.
+            AI gagal—sementara menggunakan kasus mock lokal.
           </div>
         )}
         {tab === 'case' && (
@@ -198,7 +195,9 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="container-narrow py-10 text-xs text-slate-500">For education only • © {new Date().getFullYear()}</footer>
+      <footer className="container-narrow py-10 text-xs text-slate-500">
+        Untuk edukasi saja • © {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }
