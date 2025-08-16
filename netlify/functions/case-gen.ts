@@ -1,18 +1,11 @@
-/* Minimal AI case generator via OpenAI-compatible API.
- * Env:
- *  - AI_API_KEY (required)
- *  - AI_MODEL   (default: gpt-4o-mini)
- */
 import type { Handler } from '@netlify/functions';
 import { z } from 'zod';
 import { CASE_GEN_SYSTEM, caseGenUserPrompt } from '../prompts/caseGen';
 
-// --- tiny server-side schema to validate AI output ---
 const ActionScoreSchema = z.object({
   learn: z.number().int().min(-5).max(10).optional(),
   must_have: z.boolean().optional()
 }).strict();
-
 const CaseActionSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1).max(140),
@@ -21,47 +14,45 @@ const CaseActionSchema = z.object({
   reveal_image: z.string().url().or(z.string().startsWith('/')).optional(),
   score: ActionScoreSchema.optional()
 }).strict();
-
 const CaseSchema = z.object({
   id: z.string().min(1).max(64),
   specialty: z.string().min(2).max(40),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-  meta: z.object({
-    title: z.string().min(3).max(120),
-    est_time_min: z.number().int().min(1).max(30).optional(),
-    authors: z.array(z.string()).optional()
-  }).strict(),
-  intro: z.object({
-    demographics: z.record(z.any()).optional(),
-    chief_complaint: z.string().min(2).max(120),
-    vitals: z.record(z.any()).optional(),
-    context: z.string().max(240).optional()
-  }).strict(),
-  actions: z.object({
-    history: z.array(CaseActionSchema).min(1).max(10),
-    exam: z.array(CaseActionSchema).min(0).max(10),
-    tests: z.array(CaseActionSchema).min(0).max(10)
-  }).strict(),
-  solution: z.object({
-    dx_primary: z.string().min(2).max(120),
-    ddx: z.array(z.string().min(2).max(120)).max(6).optional(),
-    management_first: z.array(z.string().min(2).max(160)).max(8).optional(),
-    red_flags: z.array(z.string().min(2).max(160)).max(8).optional(),
-    teaching_points: z.array(z.string().min(2).max(160)).max(8).optional()
-  }).strict(),
+  meta: z.object({ title: z.string().min(3).max(120), est_time_min: z.number().int().min(1).max(30).optional(), authors: z.array(z.string()).optional() }).strict(),
+  intro: z.object({ demographics: z.record(z.any()).optional(), chief_complaint: z.string().min(2).max(120), vitals: z.record(z.any()).optional(), context: z.string().max(240).optional() }).strict(),
+  actions: z.object({ history: z.array(CaseActionSchema).min(1).max(10), exam: z.array(CaseActionSchema).min(0).max(10), tests: z.array(CaseActionSchema).min(0).max(10) }).strict(),
+  solution: z.object({ dx_primary: z.string().min(2).max(120), ddx: z.array(z.string().min(2).max(120)).max(6).optional(), management_first: z.array(z.string().min(2).max(160)).max(8).optional(), red_flags: z.array(z.string().min(2).max(160)).max(8).optional(), teaching_points: z.array(z.string().min(2).max(160)).max(8).optional() }).strict(),
   references: z.array(z.string().min(2).max(120)).max(8).optional()
 }).strict();
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
+function json(statusCode: number, body: unknown) {
+  return {
+    statusCode,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  };
+}
+
 export const handler: Handler = async (event) => {
   try {
-    if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+    if (event.httpMethod === 'GET') {
+      // quick healthcheck
+      return json(200, { ok: true, expects: 'POST {specialty, difficulty}' });
+    }
+    if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
 
-    const { specialty = 'cardiology', difficulty = 2 } = JSON.parse(event.body || '{}');
+    const payload = JSON.parse(event.body || '{}');
+    const specialty = String(payload.specialty || 'cardiology');
+    const difficulty = Number(payload.difficulty || 2) as 1 | 2 | 3;
+
     const key = process.env.AI_API_KEY;
     const model = process.env.AI_MODEL || 'gpt-4o-mini';
-    if (!key) return { statusCode: 500, body: 'Missing AI_API_KEY' };
+    if (!key) {
+      console.error('case-gen missing AI_API_KEY');
+      return json(500, { error: 'Missing AI_API_KEY' });
+    }
 
     const messages = [
       { role: 'system', content: CASE_GEN_SYSTEM },
@@ -80,21 +71,27 @@ export const handler: Handler = async (event) => {
       })
     });
 
+    if (!r.ok) {
+      const text = await r.text();
+      console.error('openai error', r.status, text.slice(0, 500));
+      return json(502, { error: 'OpenAI error', status: r.status, detail: text.slice(0, 500) });
+    }
+
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content;
-    if (!content) return { statusCode: 502, body: 'Bad AI response' };
+    if (!content) {
+      console.error('no content from OpenAI', data);
+      return json(502, { error: 'Bad AI response' });
+    }
 
-    // Validate AI JSON
     const parsed = CaseSchema.parse(JSON.parse(content));
-
-    // Clamp lengths to be safe
     parsed.actions.history = parsed.actions.history.slice(0, 6);
     parsed.actions.exam = parsed.actions.exam.slice(0, 6);
     parsed.actions.tests = parsed.actions.tests.slice(0, 6);
 
-    return { statusCode: 200, body: JSON.stringify(parsed) };
+    return json(200, parsed);
   } catch (err: any) {
-    console.error('case-gen error', err);
-    return { statusCode: 500, body: JSON.stringify({ error: String(err?.message || err) }) };
+    console.error('case-gen fatal', err);
+    return json(500, { error: String(err?.message || err) });
   }
 };
