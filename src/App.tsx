@@ -2,15 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CaseFile } from './types/case';
 import type { Difficulty, Specialty, Submission, SaveEntry, ScoreBreakdown } from './types/game';
 import { specialties } from './lib/specialties';
-import { generateMockCase } from './features/case/mock';
 import { ActionHistory } from './features/common/ActionHistory';
 import { CasePanel } from './features/case/CasePanel';
 import { SearchPanel } from './features/search/SearchPanel';
 import { NotesPanel } from './features/notes/NotesPanel';
 import { DiagnosePanel } from './features/diagnose/DiagnosePanel';
 import { SavedPanel } from './features/saved/SavedPanel';
-import { scoreLocal } from './lib/scoring';
 import { saveCase, loadCases, deleteCase } from './lib/save';
+import { getCase, localGrade, remoteGrade } from './lib/api';
 
 type TabKey = 'case' | 'search' | 'notes' | 'diagnose' | 'saved';
 
@@ -30,12 +29,13 @@ export default function App() {
   const [picks, setPicks] = useState<string[]>([]);
   const [notes, setNotes] = useState<string>('');
   const [saved, setSaved] = useState<SaveEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setSaved(loadCases());
   }, []);
 
-  // Load notes per-case
   useEffect(() => {
     if (!caseJson) return;
     const key = `notes:${caseJson.id}`;
@@ -45,11 +45,19 @@ export default function App() {
 
   const canScore = useMemo(() => !!caseJson && (picks.length > 0 || notes.trim().length > 0), [caseJson, picks, notes]);
 
-  function startCase() {
-    const data = generateMockCase(specialty, difficulty);
-    setCaseJson(data);
-    setPicks([]);
-    setTab('case');
+  async function startCase() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await getCase({ specialty, difficulty }); // AI → fallback ke mock bila gagal
+      setCaseJson(data);
+      setPicks([]);
+      setTab('case');
+    } catch (e: any) {
+      setErr('Failed to start case. Check Netlify functions or try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function togglePick(actionId: string) {
@@ -58,8 +66,12 @@ export default function App() {
 
   function doLocalScore(submission: Submission): ScoreBreakdown {
     if (!caseJson) return { total: 0, local: 0 };
-    const local = scoreLocal(submission.picks, caseJson, submission.dx, submission.mgmt);
-    return { total: local, local };
+    return localGrade(caseJson, submission);
+  }
+
+  async function doRemoteReview(submission: Submission): Promise<ScoreBreakdown> {
+    if (!caseJson) return { total: 0, local: 0 };
+    return remoteGrade(caseJson, submission);
   }
 
   function onSave(sub: Submission, score: ScoreBreakdown) {
@@ -72,7 +84,7 @@ export default function App() {
       caseJson,
       submission: sub,
       score,
-      version: '0.1'
+      version: '0.2'
     };
     saveCase(entry);
     setSaved(loadCases());
@@ -124,8 +136,8 @@ export default function App() {
             <option value={3}>3 (hard)</option>
           </select>
 
-          <button onClick={startCase} className="ml-3 px-3 py-1.5 rounded bg-blue-600 text-white text-sm">
-            Start Case
+          <button onClick={startCase} className="ml-3 px-3 py-1.5 rounded bg-blue-600 text-white text-sm" disabled={loading}>
+            {loading ? 'Starting…' : 'Start Case'}
           </button>
         </div>
 
@@ -148,6 +160,7 @@ export default function App() {
 
       {/* Main */}
       <main className="container-narrow py-6 space-y-6">
+        {err && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{err}</div>}
         {tab === 'case' && (
           <>
             <CasePanel caseJson={caseJson} picks={picks} onTogglePick={togglePick} />
@@ -160,6 +173,7 @@ export default function App() {
           <DiagnosePanel
             enabled={!!caseJson}
             onLocalScore={(sub) => doLocalScore(sub)}
+            onRemoteReview={(sub) => doRemoteReview(sub)}
             onSave={(sub, sc) => onSave(sub, sc)}
             defaultPicks={picks}
           />
