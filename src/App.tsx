@@ -31,6 +31,7 @@ export default function App() {
   const [saved, setSaved] = useState<SaveEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [usedFallback, setUsedFallback] = useState(false);
 
   useEffect(() => {
     setSaved(loadCases());
@@ -48,13 +49,23 @@ export default function App() {
   async function startCase() {
     setLoading(true);
     setErr(null);
+    setUsedFallback(false);
     try {
-      const data = await getCase({ specialty, difficulty }); // AI → fallback ke mock bila gagal
+      const data = await getCase({ specialty, difficulty }); // AI → fallback internal di api.ts (mock jika /api tidak ada)
       setCaseJson(data);
       setPicks([]);
       setTab('case');
     } catch (e: any) {
-      setErr('Failed to start case. Check Netlify functions or try again.');
+      // Hard fallback: pakai mock lokal jika benar2 gagal
+      try {
+        const { generateMockCase } = await import('./features/case/mock');
+        const mock = generateMockCase(specialty, difficulty);
+        setCaseJson(mock);
+        setUsedFallback(true);
+        setTab('case');
+      } catch {
+        setErr('Failed to start case. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -161,9 +172,14 @@ export default function App() {
       {/* Main */}
       <main className="container-narrow py-6 space-y-6">
         {err && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{err}</div>}
+        {usedFallback && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded">
+            AI case generation failed — using local mock case for now.
+          </div>
+        )}
         {tab === 'case' && (
           <>
-            <CasePanel caseJson={caseJson} picks={picks} onTogglePick={togglePick} />
+            <CasePanel caseJson={caseJson} picks={picks} onTogglePick={togglePick} loading={loading} />
             <ActionHistory picks={picks} />
           </>
         )}
