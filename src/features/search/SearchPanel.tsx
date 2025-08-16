@@ -1,92 +1,112 @@
 // src/features/search/SearchPanel.tsx
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { searchSnippets, summarizeQuery, type WebSnippet } from "../../lib/api";
 
-/**
- * Embed Google yang paling sederhana & stabil:
- * - Tidak memuat google di awal (hindari X-Frame-Options).
- * - Saat user submit, set src => https://www.google.com/search?igu=1&hl=id&q=...
- * - Jika tetap diblok pada device tertentu, tampilkan tombol "Buka di Tab Baru".
- */
 export function SearchPanel() {
   const [q, setQ] = useState("");
-  const [url, setUrl] = useState<string | null>(null); // null = belum load apa pun
-  const [blocked, setBlocked] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [snips, setSnips] = useState<WebSnippet[]>([]);
+  const [sum, setSum] = useState<{ summary: string; key_points: string[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  function doSearch(e?: React.FormEvent) {
+  async function run(e?: React.FormEvent) {
     e?.preventDefault();
     const query = q.trim();
-    // kalau kosong, tampilkan halaman search “kosong” (tetap pakai igu=1)
-    const next = query
-      ? `https://www.google.com/search?igu=1&hl=id&q=${encodeURIComponent(query)}`
-      : `https://www.google.com/search?igu=1&hl=id`;
-    setBlocked(false);
-    setUrl(next);
+    if (!query) return;
+
+    setLoading(true);
+    setErr(null);
+    setSum(null);
+    setSnips([]);
+
+    try {
+      const results = await searchSnippets(query);
+      setSnips(results);
+      const s = await summarizeQuery(query, results);
+      setSum(s);
+    } catch {
+      setErr("Gagal mengambil hasil dari Google. Cek GOOGLE_CSE_KEY/ID.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <section className="space-y-3">
-      {/* Bar pencarian */}
-      <form
-        onSubmit={doSearch}
-        className="flex items-center gap-2 bg-white shadow px-3 py-2 rounded-lg border"
-      >
+    <section className="space-y-4">
+      {/* Search bar */}
+      <form onSubmit={run} className="bg-white border rounded-xl shadow-sm p-3 flex items-center gap-2">
         <input
-          type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && doSearch()}
-          placeholder="Cari istilah medis, guideline, diagnosis…"
-          className="flex-1 px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+          placeholder="Cari guideline/definisi/diagnosis… (contoh: STEMI management 2024 guideline)"
+          className="flex-1 px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-emerald-500 outline-none"
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded hover:bg-emerald-700"
+          disabled={loading}
+          className="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
         >
-          Cari
+          {loading ? "Mencari…" : "Cari"}
         </button>
       </form>
 
-      {/* Info kecil */}
-      <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded">
-        Google akan dibuka di dalam aplikasi setelah kamu menekan <b>Cari</b>.
-        Menggunakan mode embed <code>igu=1</code> agar lebih kompatibel.
+      {/* Summary */}
+      <div className="bg-white border rounded-xl shadow-sm p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-800">Ringkasan (Summary)</h3>
+          {!!snips.length && <span className="text-[11px] text-slate-500">{snips.length} sumber</span>}
+        </div>
+
+        {!sum && !loading && (
+          <p className="text-sm text-slate-500 mt-2">Tulis kueri lalu tekan <b>Cari</b>. Ringkasan akan muncul di sini.</p>
+        )}
+
+        {loading && (
+          <div className="animate-pulse space-y-2 mt-3">
+            <div className="h-3 bg-slate-200 rounded" />
+            <div className="h-3 bg-slate-200 rounded w-5/6" />
+            <div className="h-3 bg-slate-200 rounded w-2/3" />
+          </div>
+        )}
+
+        {sum && (
+          <div className="mt-3">
+            {sum.summary && <p className="text-sm text-slate-700 whitespace-pre-wrap">{sum.summary}</p>}
+            {sum.key_points?.length > 0 && (
+              <ul className="mt-3 grid md:grid-cols-2 gap-2 text-sm">
+                {sum.key_points.map((x, i) => (
+                  <li key={i} className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded px-2 py-1">
+                    {x}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {err && <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">{err}</div>}
       </div>
 
-      {/* Viewer */}
-      <div className="w-full h-[70vh] border rounded-lg overflow-hidden bg-white relative">
-        {!url ? (
-          <div className="h-full flex items-center justify-center text-sm text-slate-500">
-            Ketik kueri lalu tekan <b>Cari</b>.
-          </div>
-        ) : (
-          <>
-            <iframe
-              ref={iframeRef}
-              key={url}
-              src={url}
-              title="Google Search"
-              className="w-full h-full"
-              // Kalau browser menolak iframe, sebagian akan memicu onError,
-              // sebagian tidak. Kita sediakan fallback tombol di bawah.
-              onError={() => setBlocked(true)}
-            />
-            {blocked && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90">
-                <div className="text-sm text-slate-600">
-                  Sepertinya Google memblokir embed di perangkat ini.
-                </div>
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded hover:bg-emerald-700"
-                >
-                  Buka di Tab Baru
-                </a>
-              </div>
-            )}
-          </>
+      {/* Results */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {snips.map((s, i) => (
+          <a
+            key={s.url + i}
+            href={s.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block bg-white border rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow"
+          >
+            <div className="text-sm font-medium text-slate-800 line-clamp-2">{s.title}</div>
+            <div className="text-xs text-slate-500 mt-1 line-clamp-3">{s.snippet}</div>
+            <div className="text-[11px] text-slate-400 mt-2 break-all">
+              {(() => { try { return new URL(s.url).hostname; } catch { return s.url; } })()}
+            </div>
+          </a>
+        ))}
+
+        {!loading && !snips.length && (
+          <div className="text-sm text-slate-500">Tidak ada hasil—coba query lain.</div>
         )}
       </div>
     </section>
