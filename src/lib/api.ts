@@ -188,3 +188,29 @@ Schema:
 }`;
   return callOpenAI(apiKey, prompt);
 }
+// --- Google search helpers (client) ---
+export type WebSnippet = { title: string; url: string; snippet: string; source?: string };
+
+export async function searchSnippets(q: string, n = 6): Promise<WebSnippet[]> {
+  const r = await fetch("/api/google-search", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ q, n }),
+  });
+  if (!r.ok) return [];
+  const data = await r.json();
+  return data.results || [];
+}
+
+export async function summarizeQuery(
+  q: string,
+  snippets: WebSnippet[]
+): Promise<{ summary: string; key_points: string[] }> {
+  const r = await fetch("/api/summarize", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ q, snippets }),
+  });
+  if (!r.ok) return { summary: "", key_points: [] };
+  return r.json();
+}
